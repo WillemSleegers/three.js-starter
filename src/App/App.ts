@@ -1,5 +1,7 @@
 import { Scene, Mesh } from "three"
 import Camera from "./Camera"
+import Controls from "./Controls"
+import FPSControls from "./FPSControls"
 import Renderer from "./Renderer"
 import World from "./World/World"
 import Debug from "./Utils/Debug"
@@ -10,6 +12,8 @@ import { sources } from "./sources"
 
 export default class App {
   camera: Camera
+  //controls: Controls
+  controls: FPSControls
   canvas: HTMLElement
   scene: Scene
   sizes: Sizes
@@ -26,7 +30,9 @@ export default class App {
     this.sizes = new Sizes()
     this.time = new Time()
     this.scene = new Scene()
-    this.camera = new Camera(this.canvas, this.scene, this.sizes)
+    this.camera = new Camera(this.scene, this.sizes)
+    //this.controls = new Controls(this.camera, this.canvas)
+    this.controls = new FPSControls(this.camera, this.canvas, this.time)
     this.renderer = new Renderer(
       this.camera,
       this.canvas,
@@ -51,7 +57,7 @@ export default class App {
   }
 
   update() {
-    this.camera.update()
+    this.controls.update()
     this.world.update()
     this.renderer.update()
   }
@@ -60,17 +66,13 @@ export default class App {
     this.sizes.removeCallback("resize")
     this.time.removeCallback("tick")
 
-    // Traverse the whole scene
     this.scene.traverse((child) => {
-      // Test if it's a mesh
       if (child instanceof Mesh) {
         child.geometry.dispose()
 
-        // Loop through the material properties
         for (const key in child.material) {
           const value = child.material[key]
 
-          // Test if there is a dispose function
           if (value && typeof value.dispose === "function") {
             value.dispose()
           }
@@ -78,7 +80,6 @@ export default class App {
       }
     })
 
-    this.camera.controls.dispose()
     this.renderer.instance.dispose()
 
     if (this.debug.active) this.debug.ui.destroy()

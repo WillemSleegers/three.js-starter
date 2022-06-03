@@ -37,7 +37,6 @@ export default class Resources extends Events {
   }
 
   startLoading() {
-    // Load each source
     for (const source of this.sources) {
       if (source.type === "gltfModel") {
         this.loaders.gltfLoader.load(source.path as string, (file) => {

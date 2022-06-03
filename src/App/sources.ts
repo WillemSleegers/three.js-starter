@@ -30,4 +30,9 @@ export const sources: {
     type: "gltfModel",
     path: "models/Fox/glTF/Fox.gltf",
   },
+  {
+    name: "ratModel",
+    type: "gltfModel",
+    path: "models/Rat/Rat.glb",
+  },
 ]

@@ -136,3 +136,7 @@
 
 - Check if the npm packages are outdated: `npm outdated`
 - Upgrade outdated packages: `npm upgrade`
+
+## Usage
+
+- Run `npm `

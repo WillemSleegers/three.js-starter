@@ -20,15 +20,12 @@ export default class Environment {
     this.resources = resources
     this.debug = debug
 
-    // Debug
     if (this.debug.active) {
       this.debugFolder = this.debug.ui.addFolder("environment")
     }
 
-    // Add sun light
     this.addSunLight()
 
-    // Add environment map
     this.addEnvironmentMap()
   }
 
@@ -42,7 +39,6 @@ export default class Environment {
 
     this.scene.add(sunLight)
 
-    // Debug
     if (this.debug.active) {
       this.debugFolder
         .add(sunLight, "intensity")

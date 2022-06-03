@@ -24,7 +24,6 @@ export default class Floor {
     this.scene = scene
     this.resources = resources
 
-    // Setup
     this.setGeometry()
     this.setTextures()
     this.setMaterial()
