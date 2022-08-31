@@ -63,6 +63,7 @@ export default class Rat {
   setModel() {
     this.model = this.resource.scene
     this.model.scale.set(0.1, 0.1, 0.1)
+    this.model.position.set(2, 0, 2)
     this.scene.add(this.model)
 
     this.model.traverse((child: any) => {

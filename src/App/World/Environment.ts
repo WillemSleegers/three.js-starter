@@ -1,5 +1,6 @@
 import {
   Scene,
+  AmbientLight,
   DirectionalLight,
   sRGBEncoding,
   Mesh,
@@ -25,8 +26,23 @@ export default class Environment {
     }
 
     this.addSunLight()
+    this.addAmbientLight()
 
     this.addEnvironmentMap()
+  }
+
+  addAmbientLight() {
+    const ambientLight = new AmbientLight(0xffffff, 0.5)
+    this.scene.add(ambientLight)
+
+    if (this.debug.active) {
+      this.debugFolder
+        .add(ambientLight, "intensity")
+        .name("ambientLightIntensity")
+        .min(0)
+        .max(10)
+        .step(0.001)
+    }
   }
 
   addSunLight() {

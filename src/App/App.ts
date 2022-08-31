@@ -31,8 +31,7 @@ export default class App {
     this.time = new Time()
     this.scene = new Scene()
     this.camera = new Camera(this.scene, this.sizes)
-    //this.controls = new Controls(this.camera, this.canvas)
-    this.controls = new FPSControls(this.camera, this.canvas, this.time)
+
     this.renderer = new Renderer(
       this.camera,
       this.canvas,
@@ -41,6 +40,14 @@ export default class App {
     )
     this.resources = new Resources(sources)
     this.world = new World(this.scene, this.resources, this.time, this.debug)
+
+    //this.controls = new Controls(this.camera, this.canvas)
+    this.controls = new FPSControls(
+      this.camera,
+      this.canvas,
+      this.time,
+      this.world.worldOctree
+    )
 
     this.sizes.addCallback("resize", () => {
       this.resize()
@@ -60,6 +67,8 @@ export default class App {
     this.controls.update()
     this.world.update()
     this.renderer.update()
+
+    if (this.debug.stats) this.debug.stats.update()
   }
 
   destroy() {

@@ -1,4 +1,7 @@
-import { Euler, Vector3 } from "three"
+import { Scene, Euler, Vector3 } from "three"
+import { Octree } from "three/examples/jsm/math/Octree.js"
+import { OctreeHelper } from "three/examples/jsm/helpers/OctreeHelper.js"
+import { Capsule } from "three/examples/jsm/math/Capsule.js"
 import Camera from "./Camera"
 import Time from "./Utils/Time"
 
@@ -6,14 +9,12 @@ export default class FPSControls {
   camera: Camera
   canvas: HTMLElement
   time: Time
+  scene: Scene
+  worldOctree: Octree
 
   isLocked: boolean
   minPolarAngle: number
   maxPolarAngle: number
-
-  changeEvent: { type: string }
-  lockEvent: { type: string }
-  unlockEvent: { type: string }
 
   vec: Vector3
 
@@ -27,21 +28,37 @@ export default class FPSControls {
   canFly: boolean
   canJump: boolean
 
+  keyStates: { [key: string]: boolean }
+
+  playerVelocity: Vector3
+  playerDirection: Vector3
+  playerOnFloor: boolean
+  playerCollider: Capsule
+
   velocity: Vector3
   direction: Vector3
   euler: Euler
 
   speeds: {
     momentum: number
+    camera: number
     runSpeed: number
+    runMultiplier: number
+    flySpeed: number
     gravity: number
     jump: number
   }
 
-  constructor(camera: Camera, canvas: HTMLElement, time: Time) {
+  constructor(
+    camera: Camera,
+    canvas: HTMLElement,
+    time: Time,
+    worldOctree: Octree
+  ) {
     this.camera = camera
     this.canvas = canvas
     this.time = time
+    this.worldOctree = worldOctree
 
     // Constrain the pitch of the camera
     this.minPolarAngle = 0
@@ -49,15 +66,21 @@ export default class FPSControls {
 
     this.euler = new Euler(0, 0, 0, "YXZ")
     this.vec = new Vector3()
+
+    this.keyStates = {}
+
+    this.playerCollider = new Capsule(
+      new Vector3(2, 0.35, 2),
+      new Vector3(2, 1, 2),
+      0.35
+    )
+
+    this.playerVelocity = new Vector3()
+    this.playerDirection = new Vector3()
+    this.playerOnFloor = false
+
     this.velocity = new Vector3()
     this.direction = new Vector3()
-
-    this.movingForward = false
-    this.movingBackward = false
-    this.movingLeft = false
-    this.movingRight = false
-    this.movingUp = false
-    this.movingDown = false
 
     this.isLocked = false
 
@@ -65,10 +88,13 @@ export default class FPSControls {
     this.canJump = true
 
     this.speeds = {
-      momentum: 0.016,
-      runSpeed: 0.0025,
-      gravity: 0.001,
-      jump: 0.25,
+      camera: 0.002,
+      momentum: 3,
+      runSpeed: 1.42,
+      runMultiplier: 5,
+      flySpeed: 0.1,
+      gravity: 1,
+      jump: 3,
     }
 
     this.connect()
@@ -77,13 +103,13 @@ export default class FPSControls {
   private onMouseMove(event: MouseEvent) {
     if (this.isLocked === false) return
 
-    var movementX = event.movementX || 0
-    var movementY = event.movementY || 0
+    const movementX = event.movementX || 0
+    const movementY = event.movementY || 0
 
     this.euler.setFromQuaternion(this.camera.instance.quaternion)
 
-    this.euler.y -= movementX * 0.002
-    this.euler.x -= movementY * 0.002
+    this.euler.y -= movementX * this.speeds.camera
+    this.euler.x -= movementY * this.speeds.camera
 
     this.euler.x = Math.max(
       Math.PI / 2 - this.maxPolarAngle,
@@ -103,82 +129,6 @@ export default class FPSControls {
     }
   }
 
-  private onKeyDown(event: KeyboardEvent) {
-    switch (event.code) {
-      case "ArrowUp":
-      case "KeyW":
-        this.movingForward = true
-        break
-
-      case "ArrowLeft":
-      case "KeyA":
-        this.movingLeft = true
-        break
-
-      case "ArrowDown":
-      case "KeyS":
-        this.movingBackward = true
-        break
-
-      case "ArrowRight":
-      case "KeyD":
-        this.movingRight = true
-        break
-
-      case "Space":
-        if (this.canFly === true) {
-          this.movingUp = true
-        } else if (this.canJump === true) {
-          this.velocity.y += this.speeds.jump
-          this.canJump = false
-        }
-        break
-
-      case "ControlLeft":
-        this.movingDown = true
-        break
-
-      case "KeyF":
-        if (this.canFly === true) {
-          this.canFly = false
-        } else {
-          this.canFly = true
-        }
-    }
-  }
-
-  private onKeyUp(event: KeyboardEvent) {
-    switch (event.code) {
-      case "ArrowUp":
-      case "KeyW":
-        this.movingForward = false
-        break
-
-      case "ArrowLeft":
-      case "KeyA":
-        this.movingLeft = false
-        break
-
-      case "ArrowDown":
-      case "KeyS":
-        this.movingBackward = false
-        break
-
-      case "ArrowRight":
-      case "KeyD":
-        this.movingRight = false
-        break
-
-      case "Space":
-        this.movingUp = false
-        break
-
-      case "ControlLeft":
-        this.movingDown = false
-        break
-    }
-  }
-
   private onPointerlockError() {
     console.error("THREE.PointerLockControls: Unable to use Pointer Lock API")
   }
@@ -187,11 +137,22 @@ export default class FPSControls {
     this.canvas.ownerDocument.addEventListener("click", () => {
       this.canvas.requestPointerLock()
     })
-    this.canvas.ownerDocument.addEventListener("mousemove", (event) =>
+
+    this.canvas.ownerDocument.addEventListener("mousemove", (event) => {
       this.onMouseMove(event)
-    )
-    document.addEventListener("keydown", (event) => this.onKeyDown(event))
-    document.addEventListener("keyup", (event) => this.onKeyUp(event))
+    })
+
+    document.addEventListener("keydown", (event) => {
+      this.keyStates[event.code] = true
+    })
+
+    document.addEventListener("keyup", (event) => {
+      this.keyStates[event.code] = false
+    })
+
+    //document.addEventListener("keydown", (event) => this.onKeyDown(event))
+    //document.addEventListener("keyup", (event) => this.onKeyUp(event))
+
     this.canvas.ownerDocument.addEventListener("pointerlockchange", () =>
       this.onPointerlockChange()
     )
@@ -207,8 +168,17 @@ export default class FPSControls {
     this.canvas.ownerDocument.removeEventListener("mousemove", (event) =>
       this.onMouseMove(event)
     )
-    document.removeEventListener("keydown", (event) => this.onKeyDown(event))
-    document.removeEventListener("keyup", (event) => this.onKeyUp(event))
+
+    document.removeEventListener("keydown", (event) => {
+      this.keyStates[event.code] = true
+    })
+
+    document.removeEventListener("keyup", (event) => {
+      this.keyStates[event.code] = false
+    })
+
+    //document.removeEventListener("keydown"), (event) => this.onKeyDown(event))
+    //document.removeEventListener("keyup", (event) => this.onKeyUp(event))
     this.canvas.ownerDocument.removeEventListener("pointerlockchange", () =>
       this.onPointerlockChange()
     )
@@ -221,93 +191,112 @@ export default class FPSControls {
     this.disconnect()
   }
 
-  // retaining this method for backward compatibility
-  getObject() {
-    return this.camera
+  getForwardVector() {
+    this.camera.instance.getWorldDirection(this.playerDirection)
+    this.playerDirection.y = 0
+    this.playerDirection.normalize()
+
+    return this.playerDirection
   }
 
-  moveForward(distance: number) {
-    // move forward parallel to the xz-plane
-    // assumes camera.up is y-up
-    this.vec.setFromMatrixColumn(this.camera.instance.matrix, 0)
+  getSideVector() {
+    this.camera.instance.getWorldDirection(this.playerDirection)
+    this.playerDirection.y = 0
+    this.playerDirection.normalize()
+    this.playerDirection.cross(this.camera.instance.up)
 
-    this.vec.crossVectors(this.camera.instance.up, this.vec)
-
-    this.camera.instance.position.addScaledVector(this.vec, distance)
+    return this.playerDirection
   }
 
-  moveRight(distance: number) {
-    this.vec.setFromMatrixColumn(this.camera.instance.matrix, 0)
+  controls(deltaTime: number) {
+    const speed = this.playerOnFloor
+      ? this.speeds.runSpeed
+      : this.speeds.flySpeed
+    let speedDelta = deltaTime * speed
 
-    this.camera.instance.position.addScaledVector(this.vec, distance)
+    if (this.keyStates["KeyW"]) {
+      if (this.keyStates["ShiftLeft"]) {
+        speedDelta *= this.speeds.runMultiplier
+      }
+      this.playerVelocity.add(
+        this.getForwardVector().multiplyScalar(speedDelta)
+      )
+    }
+
+    if (this.keyStates["KeyS"]) {
+      if (this.keyStates["ShiftLeft"]) {
+        speedDelta *= this.speeds.runMultiplier
+      }
+
+      this.playerVelocity.add(
+        this.getForwardVector().multiplyScalar(-speedDelta)
+      )
+    }
+
+    if (this.keyStates["KeyA"]) {
+      this.playerVelocity.add(this.getSideVector().multiplyScalar(-speedDelta))
+    }
+
+    if (this.keyStates["KeyD"]) {
+      this.playerVelocity.add(this.getSideVector().multiplyScalar(speedDelta))
+    }
+
+    if (this.playerOnFloor) {
+      if (this.keyStates["Space"]) {
+        this.playerVelocity.y = this.speeds.jump
+      }
+    }
   }
 
-  moveUp(distance: number) {
-    this.euler.setFromQuaternion(this.camera.instance.quaternion)
+  playerCollisions() {
+    const result = this.worldOctree.capsuleIntersect(this.playerCollider)
 
-    this.camera.instance.position.addScaledVector(
-      this.camera.instance.up,
-      distance
-    )
+    if (result) {
+      this.playerOnFloor = result.normal.y <= 1
+
+      if (!this.playerOnFloor) {
+        this.playerVelocity.addScaledVector(
+          result.normal,
+          -result.normal.dot(this.playerVelocity)
+        )
+      }
+
+      this.playerCollider.translate(result.normal.multiplyScalar(result.depth))
+    } else {
+      // if there is no collision with any of the objects, the player is flying
+      this.playerOnFloor = false
+    }
+  }
+
+  updatePlayer(deltaTime: number) {
+    let damping = Math.exp(-this.speeds.momentum * deltaTime) - 1
+
+    if (!this.playerOnFloor) {
+      // gravity
+      this.playerVelocity.y -= this.speeds.gravity * deltaTime
+
+      // small air resistance
+      damping *= 0.1
+    }
+
+    this.playerVelocity.addScaledVector(this.playerVelocity, damping)
+
+    const deltaPosition = this.playerVelocity.clone().multiplyScalar(deltaTime)
+    this.playerCollider.translate(deltaPosition)
+
+    this.playerCollisions()
+
+    this.camera.instance.position.copy(this.playerCollider.end)
   }
 
   update() {
-    if (this.isLocked === true) {
-      const delta = this.time.delta
-      const direction = this.direction
-      const velocity = this.velocity
-      const speeds = this.speeds
+    const deltaTime = this.time.delta / 1000
 
-      // determine direction by converting the boolean value to a number and subtracting them
-      direction.z = Number(this.movingForward) - Number(this.movingBackward) // 1 = forward; -1 = backward; 0 = neither
-      direction.y = Number(this.movingUp) - Number(this.movingDown) // 1 = up; -1 = down; 0 = neither
-      direction.x = Number(this.movingRight) - Number(this.movingLeft) // 1 = right; -1 = left; 0 = neither
+    const steps = 5
 
-      direction.normalize() // this ensures consistent movements in all directions
-
-      // add direction to velocity as long as the button is pressed, which equals the speed
-      if (this.movingForward || this.movingBackward)
-        velocity.z -= direction.z * speeds.runSpeed * delta
-      if (this.movingLeft || this.movingRight)
-        velocity.x -= direction.x * speeds.runSpeed * delta
-
-      // reduce velocity over time (momentum)
-      velocity.z -= velocity.z * speeds.momentum * delta
-      velocity.x -= velocity.x * speeds.momentum * delta
-
-      // move
-      this.moveRight(-velocity.x)
-      this.moveForward(-velocity.z)
-
-      if (this.canFly === true) {
-        // get the camera's position/angle
-        this.euler.setFromQuaternion(this.camera.instance.quaternion)
-
-        // add direction to velocity as long as the button is pressed
-        if (this.movingForward || this.movingBackward)
-          // add the camera's up-down angle to the velocity
-          velocity.y -= direction.z * speeds.runSpeed * delta * this.euler.x
-        if (this.movingUp || this.movingDown)
-          velocity.y -= direction.y * speeds.runSpeed * delta
-
-        // momentum
-        velocity.y -= velocity.y * speeds.momentum * delta
-
-        this.moveUp(-velocity.y)
-      } else {
-        // fall back after a jump
-        velocity.y -= speeds.gravity * 1 * delta
-
-        this.moveUp(velocity.y)
-
-        // if the camera ever falls below 1, set the values to their default values
-        if (this.camera.instance.position.y < 1) {
-          velocity.y = 0
-          this.camera.instance.position.y = 1
-
-          this.canJump = true
-        }
-      }
+    for (let i = 0; i < steps; i++) {
+      this.controls(deltaTime * (5 / steps))
+      this.updatePlayer(deltaTime * (5 / steps))
     }
   }
 }

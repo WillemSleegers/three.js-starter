@@ -31,7 +31,7 @@ export default class Floor {
   }
 
   setGeometry() {
-    this.geometry = new CircleGeometry(5, 64)
+    this.geometry = new CircleGeometry(10, 64)
   }
 
   setTextures() {
